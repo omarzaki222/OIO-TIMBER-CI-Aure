@@ -60,7 +60,7 @@ spec:
 
     parameters {
         booleanParam(name: 'PUSH_IMAGES', defaultValue: false, description: 'Force image push on non-main branches')
-        string(name: 'API_PUBLIC_URL', defaultValue: 'http://REPLACE_INGRESS_HOST/api', description: 'NEXT_PUBLIC_API_URL baked into frontend/admin images')
+        string(name: 'API_PUBLIC_URL', defaultValue: 'http://api.20.127.183.78.nip.io', description: 'NEXT_PUBLIC_API_URL baked into frontend/admin (origin only; clients append /api/v1)')
     }
 
     environment {

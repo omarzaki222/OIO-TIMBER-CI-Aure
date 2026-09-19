@@ -1,0 +1,17 @@
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+tests
+.env
+.env.*
+*.md
+.git
+.gitignore
+.coverage
+htmlcov
+docker-entrypoint.sh.bak

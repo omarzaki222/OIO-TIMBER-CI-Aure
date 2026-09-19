@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f4efe6;
+  --foreground: #1a1714;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}
+
+::selection {
+  background: #c4a35a;
+  color: #1a1714;
+}
+
+input,
+textarea,
+select {
+  background: transparent;
+  color: inherit;
+}

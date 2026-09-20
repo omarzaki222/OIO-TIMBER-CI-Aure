@@ -4,15 +4,14 @@
 //
 // Jenkins credentials (create in UI — never commit):
 //   acr-oio       — Username/password  (ACR admin user for oioazureregistry)
-//   github-oio    — GitHub PAT         (checkout / webhooks; optional if public)
+//   github-oio    — GitHub PAT         (checkout / webhooks; job-level SCM credential)
 //   git-cd-push   — GitHub PAT         (push to OIO-TIMBER-CD-azure)
 //
 // Expected checkout layout (repo root):
 //   application/{backend,frontend,admin-panel}
-//   CI/Jenkinsfile  OR  Jenkinsfile at root (this file)
+//   Jenkinsfile at repo root (this file)
 //
-// Job script path when using the monorepo: CI/Jenkinsfile
-// Job script path when using OIO-TIMBER-CI-Aure with this file at root: Jenkinsfile
+// Job: Pipeline script from SCM → Script Path: Jenkinsfile
 
 pipeline {
     agent {
@@ -59,13 +58,16 @@ spec:
     }
 
     parameters {
-        booleanParam(name: 'PUSH_IMAGES', defaultValue: false, description: 'Force image push on non-main branches')
+        booleanParam(
+            name: 'PUSH_IMAGES',
+            defaultValue: false,
+            description: 'When true, build/push images to ACR and update the CD repository image tags. Standalone Pipeline job (not Multibranch) — leave false for test-only runs.'
+        )
         string(name: 'API_PUBLIC_URL', defaultValue: 'http://api.20.127.183.78.nip.io', description: 'NEXT_PUBLIC_API_URL baked into frontend/admin (origin only; clients append /api/v1)')
     }
 
     environment {
         ACR_LOGIN_SERVER = 'oioazureregistry.azurecr.io'
-        IMAGE_TAG        = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'local'}"
         CD_REPO_URL      = 'https://github.com/omarzaki222/OIO-TIMBER-CD-azure.git'
         CD_BRANCH        = 'main'
         CD_KUSTOMIZE     = 'environments/azure/kustomization.yaml'
@@ -81,6 +83,11 @@ spec:
         stage('Checkout') {
             steps {
                 checkout scm
+                script {
+                    def sha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${sha.take(7)}"
+                    echo "IMAGE_TAG=${env.IMAGE_TAG}"
+                }
             }
         }
 
@@ -132,11 +139,7 @@ spec:
 
         stage('Build & push images to ACR') {
             when {
-                anyOf {
-                    branch 'main'
-                    branch 'master'
-                    expression { return params.PUSH_IMAGES == true }
-                }
+                expression { return params.PUSH_IMAGES == true }
             }
             steps {
                 container('docker') {
@@ -147,6 +150,23 @@ spec:
                     )]) {
                         sh '''
                             set -euo pipefail
+
+                            echo "Waiting for Docker daemon (docker info)..."
+                            ready=0
+                            for i in $(seq 1 30); do
+                              if docker info >/dev/null 2>&1; then
+                                echo "Docker is ready (attempt ${i}/30)"
+                                ready=1
+                                break
+                              fi
+                              echo "Docker not ready yet (attempt ${i}/30); sleeping 2s..."
+                              sleep 2
+                            done
+                            if [ "${ready}" -ne 1 ]; then
+                              echo "ERROR: Docker daemon did not become ready after 30 attempts (60s)." >&2
+                              exit 1
+                            fi
+
                             echo "$ACR_PASS" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USER" --password-stdin
 
                             docker build -t ${ACR_LOGIN_SERVER}/oio/backend:${IMAGE_TAG} \
@@ -176,11 +196,7 @@ spec:
 
         stage('Update CD repo image tags') {
             when {
-                anyOf {
-                    branch 'main'
-                    branch 'master'
-                    expression { return params.PUSH_IMAGES == true }
-                }
+                expression { return params.PUSH_IMAGES == true }
             }
             steps {
                 container('git') {
